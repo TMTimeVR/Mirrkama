@@ -22,10 +22,24 @@ Actual malicious servers? IP/Domain blacklist. MrBeastEvent.com (malicious): in 
 
 If you want to remove the blacklist, continue at your own risk.
 
-### Overall enforcement?
+# Overall enforcement?
 
 Bans need to take effect instantly.
 
+## How?
+
+Method 1: Push (~1 second enforcement time)
+Dedicated servers each expose a small admin endpoint (HTTP listener) that accepts a single command: "disconnect user X now."
+When fired, Nakama does:
+1. Mark the account banned in storage
+2. Invalidate their Nakama session server-side (nk.sessionlogout)
+3. Read the live server list from the registry, and fire the kick call at every registered server (nk.httpRequest in runtime, parallel)
+
+Method 2: Poll
+Each game server also polls Nakama every 10 seconds "here are all connected user IDs, are any banned?" Nakama answeres using the ban list; the server disconnects any hit.
+
+Method 3: MetworkAuthenticator
+The flow should ask Nakama if the user is banned at join time.
 ### Discord bot for enforcement?
 
 Yes.
@@ -35,7 +49,7 @@ All enforement RPCs are guarded with a secret (mute secret, ban secret, etc) tha
 The Discord bot also guards the commands behind roles. The role must be above everything else in the hirarchy, so other bots and users can not change the role members.
 Banning will only be available to me and possibly other high-trust individuals with 2FA (authenticator app) enabled.
 
-Log every enforcement action in a .txt file: When, why, who.
+Log every enforcement action in a .txt file: When, why, who, how long.
 
 Also code a HTML file that stays on your PC, never goes out in the internet. That will be used as a replacement dashboard for banning when the bot goes down.
 
@@ -43,7 +57,9 @@ Also code a HTML file that stays on your PC, never goes out in the internet. Tha
 
 Session token expires in 15 minutes, refresh token expires every 5 hours. Refresh the session token every 10 minutes. Refresh the refresh token every 4 hours and 50 minutes.
 
+# Login rate-limit:
 
+If a client starts to send a login request in a 3 second time limit 5 times, rate limit them.
 
 # Comply with data protection laws.
 
