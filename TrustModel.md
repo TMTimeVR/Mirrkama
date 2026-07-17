@@ -69,18 +69,21 @@ Make a legal hold rps (gated) to hold any account from deletion if there is a cl
 # Server registration:
 
 Game server calls /v2/rpc/register_server?http_key=... as a POST request.
-**If ctx.userId is present, drop the connection/reject.** So, if possible, return 444.
+**If ctx.userId is present, reject with a generic error code. And log the attempt.** 
 
 On boot and every heartbeat, the game servers POST this payload:
 
 server_ID ( create a list of IDs in the storage, such as mirror1, mirror2, etc. )
-address + port (Only accept if it is the first registration.)
+address + port (Only accept if it is the first registration. Ignore at subsequent calls.)
 kick entpoint
 region, current_players, etc (whatever matchmaking will need)
 
-server_ID storage:
+server_ID storage (no public read):
 - ID
 - IP
 - Port
+- last heartbeat
+
+If the heartbeat is 20 seconds long, do not send it to clients through the list_servers rpc until the heartbeat is healthy again.
 
 There is no need for servers to change their IP. The Nakama operator can do that as well manually.
