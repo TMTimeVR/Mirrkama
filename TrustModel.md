@@ -29,7 +29,7 @@ Bans need to take effect instantly.
 ## How?
 
 Method 1: Push (~1 second enforcement time)
-Dedicated servers each expose a small admin endpoint (HTTP listener) that accepts a single command: "disconnect user X now."
+Dedicated servers each expose a small admin endpoint (HTTP listener) that accepts a single command: "disconnect user X now." (Of course, gated with a secret)
 When fired, Nakama does:
 1. Mark the account banned in storage
 2. Invalidate their Nakama session server-side (nk.sessionlogout)
@@ -64,3 +64,23 @@ If a client starts to send a login request in a 3 second time limit 5 times, rat
 # Comply with data protection laws.
 
 Make an account-management page where you can request the deletion of your account. Also, somehow, if required by law, create a method to request collected data.
+Make a legal hold rps (gated) to hold any account from deletion if there is a clear risk that the user is doing something illegal.
+
+# Server registration:
+
+Game server calls /v2/rpc/register_server?http_key=... as a POST request.
+**If ctx.userId is present, drop the connection/reject.** So, if possible, return 444.
+
+On boot and every heartbeat, the game servers POST this payload:
+
+server_ID ( create a list of IDs in the storage, such as mirror1, mirror2, etc. )
+address + port (Only accept if it is the first registration.)
+kick entpoint
+region, current_players, etc (whatever matchmaking will need)
+
+server_ID storage:
+- ID
+- IP
+- Port
+
+There is no need for servers to change their IP. The Nakama operator can do that as well manually.
