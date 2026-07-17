@@ -7,6 +7,7 @@ Read this part before writing any code. Every design question later gets answere
 ## Who trusts who
 
 - Client trusts Nakama. Game servers (Mirror) trust Nakama. Nakama decides who is allowed to join a server.
+- Identity starts at the platform: Nakama trusts META (nonce validation against graph.oculus.com) to vouch that a claimed org-scoped ID really belongs to this client. A platform ID without a validated nonce is worth nothing.
 - Dedicated servers verify Nakama session tokens themselves (JWT signature + expiry). The token IS the identity: nothing else the client sends about who it is counts.
 - Local JWT verification answers "is this token real", NOT "is this account in good standing". Good standing (ban status) is always asked from Nakama.
 - **server_key: the one clients use. Public.**
@@ -67,9 +68,17 @@ Work through the phases in order. Each phase ends with an exit test: don't move 
 - [ ] BEFORE anything is internet-facing: change the default server_key, http_key, and console password. Nakama defaults are publicly known and scanners look for them.
 - [ ] Console (port 7351) is NOT publicly exposed. Behind nginx with an allowlist, or not exposed at all (SSH tunnel when I need it).
 - [ ] TLS termination for the client-facing API via certbot on the host nginx (same pattern as mail.tmtime.dev).
-- [ ] Unity client authenticates (device auth is fine to start) and receives a session token.
+- [ ] Unity client authenticates via the Meta platform flow and receives a session token:
+  1. Client asks the Platform SDK for a user proof: `Users.GetUserProof()` returns a NONCE (single-use, short-lived; fetch a fresh one for every login attempt, never cache).
+  2. Client sends org-scoped ID + nonce to Nakama (custom authentication, over TLS).
+  3. Nakama, in a beforeAuthenticateCustom hook, calls Meta's validation endpoint (graph.oculus.com/user_nonce_validate) with the nonce, the claimed user ID, and MY app access token (app ID + app secret). Meta answers valid/invalid.
+  4. Invalid, expired, or reused nonce -> reject login. NEVER create or log into an account from an unvalidated platform ID, or anyone can impersonate anyone by claiming an ID.
+- [ ] The Meta app access token lives ONLY in Nakama runtime config. Never in the client build, never on game servers (they verify session JWTs, they don't do platform auth).
+- [ ] Namespace the account ID: store it as `meta:<org-scoped-id>`, not the bare number, so a future Steam/PICO port can't collide with Meta IDs.
+- [ ] Fail closed: if graph.oculus.com is unreachable, logins fail. Existing sessions keep working (tokens already issued), same philosophy as the Nakama-outage rule in 4.6.
+- [ ] Docs: Meta Horizon platform docs, "User Verification" page (Unity Platform SDK), plus Nakama server framework docs on authentication before-hooks.
 - [ ] Token lifetimes in Nakama config: session 15 min, refresh 5 h.
-- [ ] Exit test: authenticate from Unity over TLS, restart Nakama, authenticate again.
+- [ ] Exit test: authenticate from Unity over TLS with a fresh nonce. Replay the SAME nonce a second time -> rejected. Claim someone else's org-scoped ID with a garbage nonce -> rejected. Restart Nakama, authenticate again.
 
 ## Phase 2: The auth spine (custom NetworkAuthenticator)
 
@@ -139,7 +148,7 @@ Target: push ~1 s, poll guarantees <= 15 s worst case, door checks stop returns.
 
 - [ ] Kick endpoint on each game server: small HTTP listener, separate from the game port, accepts one command: "disconnect user X now." Gated with the kick secret (NOT http_key: different trust edge, different secret). Not publicly reachable if topology allows. Payload validated strictly (user ID format, nothing else).
 - [ ] Ban RPC in Nakama (called by the Discord bot with the ban secret):
-  1. Mark account banned in storage (the authoritative act; everything else is propagation).
+  1. Mark account banned in storage (the authoritative act; everything else is propagation), and append a per-account ENFORCEMENT RECORD: timestamp, action type (ban/mute), duration, public reason, acting moderator, internal note. Collection has NO public read; the user-facing view is an RPC projection (Phase 9).
   2. Invalidate the Nakama session server-side (sessionLogout: kills socket + refresh path for that session).
   3. Read live servers via the SAME `getLiveServers()` function as list_servers (shared function so the two can never drift), POST the kick to every server's kick endpoint. Parallel, 2-3 s timeout per server so one dead server can't stall the ban. Push failure is logged but does NOT fail the ban; poll and join-check mop up.
 - [ ] Poll fallback: each game server, every 10 s, sends Nakama the list of ITS currently connected user IDs and asks "any banned?" Server disconnects hits. Servers never hold a copy of the full ban list (smaller request, better for privacy).
@@ -155,12 +164,14 @@ Target: push ~1 s, poll guarantees <= 15 s worst case, door checks stop returns.
 - [ ] Tokens are NEVER written to client-side logs. Unity Debug.Log output lands in Player.log, and Player.log lands in pastebins. Audit for this before every release.
 - [ ] Login rate limit, keyed PER IP (pre-auth there is no account yet, and device ID is client-supplied = attacker-controlled): more than 5 login requests in 3 s -> limited.
 - [ ] First rate-limit layer in nginx (`limit_req`) before requests even hit Nakama; Nakama-side counting as the second layer.
+- [ ] The login rate limit now also protects the OUTBOUND side: every login attempt costs one graph.oculus.com validation call, so unthrottled login spam would make ME hammer Meta's API with my own app credentials.
 
 ## Phase 7: Enforcement ops (Discord bot + logging)
 
 - [ ] Bans/mutes are done through the Discord bot, not the Nakama dashboard.
 - [ ] Every enforcement RPC guarded by its own secret (ban secret, mute secret, ...), generated with OpenSSL, known only to the bot and Nakama. Rotatable without downtime (support two valid secrets during rotation).
 - [ ] Mutes: RPC flow mirrors bans, but enforcement happens at the voice relay (Phase 11): the server stops forwarding the muted player's voice packets. Never rely on clients politely muting themselves.
+- [ ] Bot commands take a PUBLIC reason (the user will read it on their account page, Phase 9) and an optional INTERNAL note (never shown). Mods write the public reason knowing the person will read it.
 - [ ] Bot commands gated behind a Discord role. The role sits above everything else in the hierarchy so other bots/users cannot change its members.
 - [ ] Ban rights: me and possibly other high-trust individuals, all with 2FA (authenticator app) enabled.
 - [ ] The bot's host machine is now security-critical infrastructure. Whoever owns that box owns ban power over the game. Patch and harden it like the VPS.
@@ -175,15 +186,21 @@ Target: push ~1 s, poll guarantees <= 15 s worst case, door checks stop returns.
 - [ ] NOTHING stored or earned on a community backend ever flows into official state. Storage is namespaced per backend so a malicious community Nakama can't poison anything official.
 - [ ] Community-mode sessions are VISIBLY distinct in the client UI. Warning before first connect to any community backend: "your data is not in my hands." Encourage device-auth-only there; never shared credentials.
 - [ ] The warning also covers VOICE: on community servers, voice audio relays through a third party's machine. People should know their microphone stream leaves my infrastructure.
+- [ ] Community backends CANNOT verify Meta identity: nonce validation requires my app secret, which they don't have and never will. Identity on community servers is self-asserted. One more reason the warning exists, and one more reason nothing from community backends touches official state.
 - [ ] Malicious servers: client-side IP/domain blacklist, re-fetched on every launch and every community-server connection (not on a timer; connect time is the only moment it matters).
 - [ ] Honest framing: the blacklist is a seatbelt for honest users, not a security control. Anyone malicious patches it out. "If you want to remove the blacklist, continue at your own risk."
 
 ## Phase 9: Legal & GDPR (before launch, not after)
 
 - [ ] Account-management page: request account deletion.
+- [ ] Account-management page also shows the account's OWN enforcement history: when, what (ban/mute), duration, public reason. Served by an RPC that reads only ctx.userId's records: the user ID comes from the SESSION, never from a request parameter, so nobody can read anyone else's history.
+- [ ] Never exposed in that view: the acting moderator, internal notes, anything about other accounts.
+- [ ] The history view is the natural home for the appeal path: put the appeal contact right next to it.
+- [ ] Deletion x bans: the account ID is the Meta org-scoped ID, so deleting an account and re-authing resurrects the SAME identity. A ban must therefore SURVIVE account deletion: on deletion, erase profile and personal data but retain a minimal ban record (platform ID, ban status, expiry) under legitimate interest, and say so in the privacy policy. Otherwise deletion IS the ban evasion. Confirm this construction during the legal reading.
 - [ ] Data EXPORT method: this is an obligation (GDPR Art. 15/20 access + portability), not an "if required by law."
 - [ ] Privacy policy: what is collected, why, and retention period for each category.
 - [ ] Voice chat is processing of personal data even without recording: mention the voice relay in the privacy policy.
+- [ ] Identity provider is Meta: say so in the privacy policy (what I receive: the org-scoped ID; what I send Meta at every login: that ID + nonce for validation).
 - [ ] Voice RECORDING (e.g. report clips): default is NO recording, anywhere. If I ever want report clips, that is a stop-and-get-real-legal-advice moment first: in Germany, recording the non-public spoken word without consent is a criminal offence (§ 201 StGB), so any consent design would have to be airtight.
 - [ ] The enforcement log is itself personal data: define its retention period too (see Part 3 decision).
 - [ ] Moderation flows through Discord (a US company): mention this data flow in the privacy policy.
@@ -239,6 +256,7 @@ Can be started any time after Phase 3 (needs auth + rooms). The mute items need 
 |---|---|---|---|
 | server_key | Client build + Nakama | Everyone (public by design) | Nothing, it's public |
 | http_key | Nakama config + game servers | Me, game servers | Rotate, redeploy, audit registry, check tripwire |
+| Meta app access token (app ID + app secret) | Nakama runtime config only | Me | Rotate in the Meta dev dashboard; logins fail until redeployed, sessions keep working |
 | Kick secret | Nakama runtime + game servers | Me, both sides of that edge | Rotate both sides |
 | Ban / mute secrets | Nakama runtime + Discord bot | Me, bot host | Rotate, audit both enforcement logs |
 | Session encryption key | Nakama config + game servers | Me, both | Rotate = all sessions invalidated, everyone re-logs |
@@ -249,7 +267,7 @@ Can be started any time after Phase 3 (needs auth + rooms). The mute items need 
 
 ## Open decisions (resolve in Phase 0)
 
-- [ ] **What does a ban attach to?** Options: account only (evadeable via reinstall), + device ID (soft signal only, it's client-supplied and spoofable), + IP (strongest but heaviest GDPR weight, needs short retention). Suggested default to confirm: account ban as the base, device ID recorded as an evasion signal, IP bans reserved for extreme cases with a defined short retention. Plus one line for the appeal path (even just "email X").
-- [ ] **Enforcement log retention period:** pick a number of months and put it in the privacy policy.
-- [ ] **Registry storage vs in-memory:** current plan is Nakama storage (boring, safe, survives restarts). In-memory would self-clean on restart but dies with multi-node. Storage it is unless something changes.
-- [ ] **Voice recording for moderation reports:** current answer is NO recording, anywhere, by anyone including the server. Revisit only after real legal advice (§ 201 StGB).
+- [ ] **What does a ban attach to?** The account ID is now the Meta org-scoped ID, so an account ban already survives reinstalls and factory resets: evasion requires a whole new Meta account, which is a much higher bar than device auth had. Remaining options on top: + device ID (soft signal only, client-supplied and spoofable), + IP (strongest but heaviest GDPR weight, needs short retention). Suggested default to confirm: Meta-account ban as the base, IP bans reserved for extreme cases with a defined short retention. Plus one line for the appeal path (even just "email X").
+- [ ] **Enforcement log retention period:** pick a number of months and put it in the privacy policy. Applies to the user-facing history too: records past retention disappear from BOTH views (internal log and account page).
+- [x] **Registry storage vs in-memory: DECIDED, Nakama storage.** Boring, safe, survives restarts. (In-memory would self-clean on restart but dies with multi-node.)
+- [x] **Voice recording for moderation reports: DECIDED, NO.** No recording or storing of voice, anywhere, by anyone including the server. Revisit only ever after real legal advice (§ 201 StGB).
