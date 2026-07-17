@@ -36,3 +36,7 @@ The Discord bot also guards the commands behind roles. The role must be above ev
 Banning will only be available to me and possibly other high-trust individuals with 2FA (authenticator app) enabled.
 
 Also code a HTML file that stays on your PC, never goes out in the internet. That will be used as a replacement dashboard for banning when the bot goes down.
+
+### What if a token is stolen?
+
+Session tokens re-issue every 15 seconds and expire every 20 seconds. If a person steals a session token, they will only have control for 20 seconds.
