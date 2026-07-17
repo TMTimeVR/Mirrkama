@@ -18,7 +18,7 @@ Community servers have no power over official servers.
 
 ### Enforcement on community servers?
 For all community servers: Display a warning that the client's data is not in my hands.
-Actual malicious servers? IP/Domain blacklist. MrBeastEvent.com (malicious): in a client-side blacklist.
+Actual malicious servers? IP/Domain blacklist. MrBeastEvent.com (malicious): in a client-side blacklist, that re-fetches from a domain every 15 seconds.
 
 If you want to remove the blacklist, continue at your own risk.
 
@@ -35,8 +35,15 @@ All enforement RPCs are guarded with a secret (mute secret, ban secret, etc) tha
 The Discord bot also guards the commands behind roles. The role must be above everything else in the hirarchy, so other bots and users can not change the role members.
 Banning will only be available to me and possibly other high-trust individuals with 2FA (authenticator app) enabled.
 
+Log every enforcement action in a .txt file: When, why, who.
+
 Also code a HTML file that stays on your PC, never goes out in the internet. That will be used as a replacement dashboard for banning when the bot goes down.
 
 ### What if a token is stolen?
 
 Session tokens re-issue every 15 seconds and expire every 20 seconds. If a person steals a session token, they will only have control for 20 seconds.
+
+
+# Comply with data protection laws.
+
+Make an account-management page where you can request the deletion of your account. Also, somehow, if required by law, create a method to request collected data.
