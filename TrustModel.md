@@ -18,7 +18,7 @@ Community servers have no power over official servers.
 
 ### Enforcement on community servers?
 For all community servers: Display a warning that the client's data is not in my hands.
-Actual malicious servers? IP/Domain blacklist. MrBeastEvent.com (malicious): in a client-side blacklist, that re-fetches from a domain every 15 seconds.
+Actual malicious servers? IP/Domain blacklist. MrBeastEvent.com (malicious): in a client-side blacklist, that re-fetches from a domain every launch and community server connection.
 
 If you want to remove the blacklist, continue at your own risk.
 
