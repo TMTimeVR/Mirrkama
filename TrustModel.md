@@ -31,7 +31,7 @@ Bans need to take effect instantly.
 Yes.
 
 Bans will not be done with the dashboard, but with a discord bot.
-All enforement RPCs are guarded with a secret (mute secret, ban secret, etc) that only the Discord bot and Nakama know.
+All enforement RPCs are guarded with a secret (mute secret, ban secret, etc) that only the Discord bot and Nakama know. The secrets will be generated using a OpenSSL command.
 The Discord bot also guards the commands behind roles. The role must be above everything else in the hirarchy, so other bots and users can not change the role members.
 Banning will only be available to me and possibly other high-trust individuals with 2FA (authenticator app) enabled.
 
@@ -41,7 +41,8 @@ Also code a HTML file that stays on your PC, never goes out in the internet. Tha
 
 ### What if a token is stolen?
 
-Session tokens re-issue every 15 seconds and expire every 20 seconds. If a person steals a session token, they will only have control for 20 seconds.
+Session token expires in 15 minutes, refresh token expires every 5 hours. Refresh the session token every 10 minutes. Refresh the refresh token every 4 hours and 50 minutes.
+
 
 
 # Comply with data protection laws.
