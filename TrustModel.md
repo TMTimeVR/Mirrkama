@@ -175,8 +175,9 @@ Target: push ~1 s, poll guarantees <= 15 s worst case, door checks stop returns.
 - [ ] Bot commands gated behind a Discord role. The role sits above everything else in the hierarchy so other bots/users cannot change its members.
 - [ ] Ban rights: me and possibly other high-trust individuals, all with 2FA (authenticator app) enabled.
 - [ ] The bot's host machine is now security-critical infrastructure. Whoever owns that box owns ban power over the game. Patch and harden it like the VPS.
-- [ ] Log every enforcement action: when, why, who, how long. TWICE: bot-side file AND Nakama-side (runtime log/storage), so the two logs can cross-check each other.
-- [ ] Bot-side log is append-only (`chattr +a`) or shipped elsewhere. A log the bot can write is a log an attacker on that box can edit.
+- [ ] The AUTHORITATIVE enforcement log is the per-account records in Nakama storage (Phase 5): complete by construction, since every enforcement RPC writes there, including actions from the fallback tool.
+- [ ] The bot ALSO writes each action to its own file: when, why, who, how long. This file is not the record, it is an independent WITNESS on a different machine. Cross-checking it against the Nakama records detects (a) actions someone performed by calling Nakama directly with a stolen secret, bypassing the bot, and (b) tampering on either side. This is what the incident playbook leans on.
+- [ ] The witness file is append-only (`chattr +a`) or shipped elsewhere, and kept as a ROLLING window: rotate and delete after ~6 months. Its job is detecting recent tampering, not preserving history. The bounded window also resolves the append-only vs GDPR-erasure conflict: old lines age out on their own instead of needing per-account deletion from a flat file.
 - [ ] Fallback tool for when the bot is down: my current plan is a local HTML file that never leaves my PC. Caveat, decided knowingly: the enforcement secrets sit in that file in plaintext, and browser CORS may fight the RPC calls. Alternative if it annoys me: a 20-line CLI script reading the secret from a chmod 600 file, same capability, less residue.
 
 ## Phase 8: Community servers
@@ -268,6 +269,6 @@ Can be started any time after Phase 3 (needs auth + rooms). The mute items need 
 ## Open decisions (resolve in Phase 0)
 
 - [ ] **What does a ban attach to?** The account ID is now the Meta org-scoped ID, so an account ban already survives reinstalls and factory resets: evasion requires a whole new Meta account, which is a much higher bar than device auth had. Remaining options on top: + device ID (soft signal only, client-supplied and spoofable), + IP (strongest but heaviest GDPR weight, needs short retention). Suggested default to confirm: Meta-account ban as the base, IP bans reserved for extreme cases with a defined short retention. Plus one line for the appeal path (even just "email X").
-- [ ] **Enforcement log retention period:** pick a number of months and put it in the privacy policy. Applies to the user-facing history too: records past retention disappear from BOTH views (internal log and account page).
+- [x] **Enforcement record retention: DECIDED, account lifetime.** Records live until account deletion, then get erased with the account (except the minimal ban record from Phase 9). Stated purpose in the privacy policy: transparency to the user + escalation for repeat offenses. Known weak point if a regulator ever squints: very old minor records (ancient short mutes) are hardest to defend as "still necessary." The bot-side witness file has its OWN retention: rolling ~6 month window (see Phase 7).
 - [x] **Registry storage vs in-memory: DECIDED, Nakama storage.** Boring, safe, survives restarts. (In-memory would self-clean on restart but dies with multi-node.)
 - [x] **Voice recording for moderation reports: DECIDED, NO.** No recording or storing of voice, anywhere, by anyone including the server. Revisit only ever after real legal advice (§ 201 StGB).
