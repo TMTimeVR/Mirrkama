@@ -71,7 +71,7 @@ Work through the phases in order. Each phase ends with an exit test: don't move 
 
 ## Phase 0: This document
 
-- [ ] Resolve the open decisions in Part 3 (ban attachment, retention periods).
+- [x] Resolve the open decisions in Part 3 (ban attachment, retention periods).
 - [ ] Re-read Part 1 once before every phase. Cheap, and it keeps the rules loaded.
 
 ## Phase 1: Nakama standalone + hardening
