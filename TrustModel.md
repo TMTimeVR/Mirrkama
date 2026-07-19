@@ -79,13 +79,13 @@ Work through the phases in order. Each phase ends with an exit test: don't move 
 
 ## Phase 0: This document
 
-- [ ] Resolve the remaining open decisions in Part 3 (three retention periods; everything else is decided).
+- [x] Resolve the remaining open decisions in Part 3 (three retention periods; everything else is decided).
 - [ ] Re-read Part 1 once before every phase. Cheap, and it keeps the rules loaded.
 
 ## Phase 1: Nakama standalone + hardening
 
-- [ ] Docker compose: Nakama + Postgres on the VPS.
-- [ ] BEFORE anything is internet-facing: change the default server_key, http_key, and console password. Nakama defaults are publicly known and scanners look for them.
+- [x] Docker compose: Nakama + Postgres on the VPS.
+- [x] BEFORE anything is internet-facing: change the default server_key, http_key, and console password. Nakama defaults are publicly known and scanners look for them.
 - [ ] Console (port 7351) is NOT publicly exposed. Behind nginx with an allowlist, or not exposed at all (SSH tunnel when I need it).
 - [ ] TLS termination for the client-facing API via certbot on the host nginx (same pattern as mail.tmtime.dev).
 - [ ] Unity client authenticates via the Meta platform flow and receives a session token:
