@@ -87,7 +87,7 @@ Work through the phases in order. Each phase ends with an exit test: don't move 
 - [x] Docker compose: Nakama + Postgres on the VPS.
 - [x] BEFORE anything is internet-facing: change the default server_key, http_key, and console password. Nakama defaults are publicly known and scanners look for them.
 - [x] Console (port 7351) is NOT publicly exposed. Behind nginx with an allowlist, or not exposed at all (SSH tunnel when I need it). **Use an SSH tunnel.**
-- [ ] TLS termination for the client-facing API via certbot on the host nginx (same pattern as mail.tmtime.dev).
+- [x] TLS termination for the client-facing API via certbot on the host nginx (same pattern as mail.tmtime.dev).
 - [ ] Unity client authenticates via the Meta platform flow and receives a session token:
   1. Client asks the Platform SDK for a user proof: `Users.GetUserProof()` returns a NONCE (single-use, short-lived; fetch a fresh one for every login attempt, never cache).
   2. Client sends org-scoped ID + nonce to Nakama (custom authentication, over TLS).
